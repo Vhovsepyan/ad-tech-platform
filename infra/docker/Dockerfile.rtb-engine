@@ -1,0 +1,16 @@
+# Build stage
+FROM rust:1.75 AS builder
+WORKDIR /app
+# Copy the entire workspace
+COPY . .
+# Build only the RTB engine
+RUN cargo build --release --bin rtb-engine
+
+# Runtime stage (Minimal footprint)
+FROM debian:bookworm-slim
+WORKDIR /app
+# Install OpenSSL and CA certificates (required for Kafka/HTTPS)
+RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/rtb-engine /usr/local/bin/
+
+CMD ["rtb-engine"]

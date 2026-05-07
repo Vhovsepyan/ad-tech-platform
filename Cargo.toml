@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "services/*",
+    "libs/*"
+]
+
+# Optimize dependencies across the entire workspace to speed up builds
+[workspace.dependencies]
+tokio = { version = "1.35", features = ["full"] }
+axum = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rskafka = "0.5" # The pure Rust Kafka client
+redis = { version = "0.24", features = ["tokio-comp", "json"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid"] }
+
+# Best practice for AdTech: Optimize for speed in release mode
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort" # Reduces binary size and marginally improves performance

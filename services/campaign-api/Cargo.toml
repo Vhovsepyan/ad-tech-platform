@@ -1,0 +1,15 @@
+[package]
+name = "campaign-api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum.workspace = true
+chrono = { version = "0.4.44", features = ["serde"] }
+rust_decimal = { version = "1.42.0", features = ["serde-with-float"] }
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+uuid = { version = "1.23.1", features = ["v4", "serde"] }
+validator = { version = "0.20.0", features = ["derive"] }

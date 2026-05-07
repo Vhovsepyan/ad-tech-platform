@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  # Best Practice: Use Redpanda as a drop-in Kafka replacement for local dev (lighter, faster)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+      - "9644:9644"
+
+  # Redis for Audience Edge and RTB caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # PostgreSQL for Campaign API and DSP (relational data)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: adtech
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: adtech_db
+    ports:
+      - "5432:5432"
+
+  # Best Practice Add-on: ClickHouse for Event Tracking (Trillions of rows)
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"
+      - "9000:9000"
