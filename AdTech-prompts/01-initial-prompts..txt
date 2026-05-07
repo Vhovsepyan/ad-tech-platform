@@ -1,0 +1,48 @@
+
+AdTech prompts. 
+
+1)
+Act as Principal Rust backend architect. 
+
+I am building an AdTech production-ready product.
+
+Tech stack: 
+Rust, Redis, Kafka are mandatory. For the others use best practice.  
+For now we will run on local environment, then move to the kubernates.
+
+It will contain microservices: 
+1.Campaign Management API: campaign-api
+
+2.The Real-Time Bidder (RTB): rtb-engine
+
+3.Tracking & Event Ingestion Service: event-tracker
+
+4.Aggregation & Reconciliation Workers: reconciliation-worker
+
+5.User Identity & Audience Service: audience-edge
+
+6.Publisher Ad Tag / Browser App: publisher-tag 
+
+7.Demand-Side Platform (DSP) / Creative Ad Server: dsp-server
+
+I need commands to setup project
+
+2)
+
+Act as Principal Rust backend architect. 
+
+I am building an AdTech production-ready product. 
+
+Tech stack: 
+Rust, Redis, Kafka, Kubernates are mandatory. For the others use best practice.  
+
+The first service is:
+ Campaign Management API: campaign-api
+
+I need detailed prompts for it, to build, run and test 
+
+
+(then replace service names one by one)
+
+
+

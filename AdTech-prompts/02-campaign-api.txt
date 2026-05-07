@@ -1,0 +1,72 @@
+Prompts for campaign-api service: 
+
+Prompt 1: Project Structure & Domain Modeling
+Context: I am building the campaign-api microservice in a Rust workspace.
+
+Task: Scaffold the internal directory structure following professional hexagonal architecture or DDD patterns.
+
+Create a src/domain folder for core entities (Campaign, Creative, TargetingRules).
+
+Create a src/routes folder for Axum handlers.
+
+Create a src/repository folder for SQLx database logic.
+
+Define a Campaign struct with the following fields: id (UUID), name, status (Enum: Active, Paused, Deleted), budget (Decimal), start_date, and end_date.
+
+Use serde for serialization and validator for input validation (e.g., name length > 3, budget > 0).
+
+Prompt 2: Database Schema & Migrations (SQLx)
+Context: The campaign-api uses PostgreSQL for persistent storage.
+
+Task:
+
+Write a SQL migration file to create a campaigns table matching the domain model.
+
+Include an updated_at trigger to auto-update timestamps.
+
+Provide the Rust code to initialize a PgPool using sqlx and inject it into the Axum application state.
+
+Implement a list_campaigns and create_campaign function in the repository layer using sqlx::query_as!.
+
+Prompt 3: The REST API Layer (Axum)
+Context: We need a robust API layer for the campaign-api.
+
+Task:
+
+Create Axum handlers for POST /campaigns and GET /campaigns/{id}.
+
+Implement professional error handling using a custom AppError enum that implements IntoResponse. This should handle database errors (500), validation errors (400), and not found errors (404).
+
+Add tower-http middleware for logging (tracing), CORS, and a request ID for distributed tracing.
+
+Prompt 4: Real-time Sync (Kafka Producer)
+Context: When a campaign status changes to "Active," the rtb-engine needs to know immediately.
+
+Task:
+
+Using rskafka, implement a "CampaignEventPublisher".
+
+When a campaign is updated in the database, publish a message to the campaign_updates Kafka topic.
+
+Ensure the message payload is JSON-encoded and contains the full campaign state so the RTB engine can update its local Redis cache.
+
+Use an asynchronous "outbox pattern" logic or simply ensure the Kafka publish happens after the DB commit.
+
+Prompt 5: Production Readiness (Running & Testing)
+Context: We need to ensure the service is reliable.
+
+Task:
+
+Run: Provide a docker-compose.yaml snippet to run just the campaign-api alongside its Postgres and Kafka dependencies. Include an .env template.
+
+Test: Write an integration test using axum::test_helpers or reqwest that:
+
+Spins up the API.
+
+Inserts a campaign.
+
+Verifies the status code is 201.
+
+Verifies the object is retrievable via GET.
+
+Health: Add a /health endpoint that checks the DB connection and Kafka producer status.
