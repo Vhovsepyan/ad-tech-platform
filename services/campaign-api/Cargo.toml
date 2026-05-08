@@ -6,10 +6,12 @@ edition = "2024"
 [dependencies]
 axum.workspace = true
 chrono = { version = "0.4.44", features = ["serde"] }
+rskafka.workspace = true
 rust_decimal = { version = "1.42.0", features = ["serde-with-float"] }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
+time = { version = "0.3.47", features = ["formatting"] }
 tokio.workspace = true
 tower-http = { version = "0.6.10", features = ["cors", "trace", "request-id", "util"] }
 tracing = "0.1.44"

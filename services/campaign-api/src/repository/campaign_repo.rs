@@ -34,6 +34,29 @@ impl CampaignRepository {
         Ok(inserted_campaign)
     }
 
+    /// Updates the status of a campaign and returns the updated record.
+    pub async fn update_campaign_status(
+        &self,
+        id: Uuid,
+        new_status: CampaignStatus,
+    ) -> Result<Campaign, sqlx::Error> {
+        let updated_campaign = sqlx::query_as!(
+            Campaign,
+            r#"
+            UPDATE campaigns
+            SET status = $1
+            WHERE id = $2 AND status != 'DELETED'
+            RETURNING id, name, status AS "status: CampaignStatus", budget, start_date, end_date, created_at, updated_at
+            "#,
+            new_status as CampaignStatus,
+            id
+        )
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(updated_campaign)
+    }
+
     /// Lists campaigns. In a production AdTech system, NEVER SELECT * without limits.
     /// We include pagination (limit/offset) to prevent OOM errors.
     pub async fn list_campaigns(&self, limit: i64, offset: i64) -> Result<Vec<Campaign>, Error> {

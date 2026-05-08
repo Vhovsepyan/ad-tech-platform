@@ -1,10 +1,13 @@
 mod domain;
 mod repository;
 mod routes;
+mod infrastructure;
 
 use axum::{routing::get, Router};
+use infrastructure::kafka::CampaignEventPublisher;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
+use std::sync::Arc;
 use std::time::Duration;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -16,6 +19,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: sqlx::PgPool,
+    pub kafka_publisher: Arc<CampaignEventPublisher>,
 }
 
 #[tokio::main]
@@ -31,6 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://adtech:secretpassword@localhost:5432/adtech_db".to_string());
 
+    let kafka_broker = env::var("KAFKA_BROKER")
+        .unwrap_or_else(|_| "localhost:19092".to_string());
+
     tracing::info!("Connecting to database...");
 
     let pool = PgPoolOptions::new()
@@ -43,7 +50,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("./migrations").run(&pool).await?;
     tracing::info!("Database migrations applied successfully.");
 
-    let state = AppState { db_pool: pool };
+    // Initialize Kafka Publisher
+    let publisher = CampaignEventPublisher::new(vec![kafka_broker], "campaign_updates").await?;
+
+    let state = AppState {
+        db_pool: pool,
+        kafka_publisher: Arc::new(publisher),
+    };
 
     // 2. Configure CORS (Cross-Origin Resource Sharing)
     let cors = CorsLayer::new()

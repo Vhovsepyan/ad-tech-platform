@@ -21,6 +21,11 @@ pub struct CreateCampaignRequest {
     pub end_date: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateStatusRequest {
+    pub status: crate::domain::campaign::CampaignStatus,
+}
+
 /// Pagination parameters for listing campaigns
 #[derive(Debug, Deserialize)]
 pub struct PaginationParams {
@@ -82,8 +87,45 @@ async fn create_campaign(
         .await
         .map_err(AppError::DatabaseError)?;
 
-    tracing::info!("Successfully created campaign: {}", created.id);
+    // 2. Real-time Kafka Sync
+    // We pass the fully hydrated 'created' object (with real DB timestamps) to Kafka
+    if let Err(err) = state.kafka_publisher.publish_campaign_event(&created).await {
+        // We do not fail the HTTP request if Kafka fails, because the DB commit succeeded.
+        // In a true Outbox pattern, this mismatch wouldn't happen. For now, we aggressively log it.
+        tracing::error!("CRITICAL: Failed to publish campaign {} to Kafka: {:?}", created.id, err);
+    } else {
+        tracing::info!("Successfully created and published campaign: {}", created.id);
+    }
     Ok((StatusCode::CREATED, Json(created)))
+}
+
+/// PATCH /campaigns/{id}/status
+#[tracing::instrument(skip(state))]
+async fn update_status(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateStatusRequest>,
+) -> Result<Json<Campaign>, AppError> {
+
+    let repo = CampaignRepository::new(state.db_pool.clone());
+
+    // 1. Update the DB
+    let updated = repo
+        .update_campaign_status(id, payload.status.clone())
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+    // 2. Real-time Kafka Sync (Only when status changes!)
+    // If it turns Active, the RTB engine caches it and starts bidding.
+    // If it turns Paused, the RTB engine evicts it from cache and stops bidding.
+    if let Err(err) = state.kafka_publisher.publish_campaign_event(&updated).await {
+        tracing::error!("CRITICAL: Failed to publish status update for {} to Kafka: {:?}", updated.id, err);
+    } else {
+        // As discussed, we let the route handler do the logging!
+        tracing::info!("Campaign {} status changed to {:?} and broadcasted", updated.id, updated.status);
+    }
+
+    Ok(Json(updated))
 }
 
 /// GET /campaigns/{id}
@@ -124,5 +166,6 @@ async fn list_campaigns(
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_campaign).get(list_campaigns))
-        .route("/:id", get(get_campaign)) // Register the new path variable route
+        .route("/:id", get(get_campaign))
+        .route("/:id/status", axum::routing::patch(update_status))
 }
