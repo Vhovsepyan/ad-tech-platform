@@ -2,17 +2,16 @@ use crate::domain::campaign::Campaign;
 use crate::repository::campaign_repo::CampaignRepository;
 use crate::AppState;
 use axum::{
-    extract::{Query, State},
+    extract::{Query, Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use uuid::Uuid;
 use validator::Validate;
 
-/// The payload expected when creating a new campaign
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateCampaignRequest {
     #[validate(length(min = 3))]
@@ -29,20 +28,22 @@ pub struct PaginationParams {
     pub offset: Option<i64>,
 }
 
-/// Centralized error wrapper for the API
+/// Upgraded Production Error Enum
 pub enum AppError {
     ValidationError(String),
     DatabaseError(sqlx::Error),
+    NotFound(String),
 }
 
-// Map internal errors to HTTP responses
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         let (status, error_message) = match self {
-            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             AppError::DatabaseError(err) => {
-                // In production, log the exact DB error via tracing, but hide it from the client
-                println!("Database error: {:?}", err);
+                // We use structured tracing here to log the real error for developers,
+                // but we hide the SQL error from the client to prevent data leaks.
+                tracing::error!("Database error occurred: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             }
         };
@@ -52,21 +53,22 @@ impl IntoResponse for AppError {
 }
 
 /// POST /campaigns
+// We can use the tracing macro to automatically log the inputs of this function
+#[tracing::instrument(skip(state))]
 async fn create_campaign(
     State(state): State<AppState>,
     Json(payload): Json<CreateCampaignRequest>,
 ) -> Result<(StatusCode, Json<Campaign>), AppError> {
-    // 1. Validate the incoming request
+
     if let Err(e) = payload.validate() {
         return Err(AppError::ValidationError(e.to_string()));
     }
-    
+
     let now = chrono::Utc::now();
-    // 2. Map the request to our Domain Entity
     let new_campaign = Campaign {
         id: Uuid::new_v4(),
         name: payload.name,
-        status: crate::domain::campaign::CampaignStatus::Paused, // Default to Paused for safety
+        status: crate::domain::campaign::CampaignStatus::Paused,
         budget: payload.budget,
         start_date: payload.start_date,
         end_date: payload.end_date,
@@ -74,18 +76,35 @@ async fn create_campaign(
         updated_at: now,
     };
 
-    // 3. Persist to DB
     let repo = CampaignRepository::new(state.db_pool);
     let created = repo
         .create_campaign(&new_campaign)
         .await
         .map_err(AppError::DatabaseError)?;
 
-    // 4. Return 201 Created
+    tracing::info!("Successfully created campaign: {}", created.id);
     Ok((StatusCode::CREATED, Json(created)))
 }
 
-/// GET /campaigns
+/// GET /campaigns/{id}
+#[tracing::instrument(skip(state))]
+async fn get_campaign(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>, // Extracts the UUID directly from the URL path
+) -> Result<Json<Campaign>, AppError> {
+
+    let repo = CampaignRepository::new(state.db_pool);
+    let campaign = repo
+        .get_campaign(id)
+        .await
+        .map_err(AppError::DatabaseError)?
+        .ok_or_else(|| AppError::NotFound(format!("Campaign with ID {} not found", id)))?;
+
+    Ok(Json(campaign))
+}
+
+/// Get All campaigns
+#[tracing::instrument(skip(state))]
 async fn list_campaigns(
     State(state): State<AppState>,
     Query(params): Query<PaginationParams>,
@@ -102,8 +121,8 @@ async fn list_campaigns(
     Ok(Json(campaigns))
 }
 
-/// Export the router to be nested in main.rs
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_campaign).get(list_campaigns))
+        .route("/:id", get(get_campaign)) // Register the new path variable route
 }

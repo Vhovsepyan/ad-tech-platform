@@ -54,4 +54,21 @@ impl CampaignRepository {
 
         Ok(campaigns)
     }
+
+    /// Fetches a single campaign by ID. Returns None if it doesn't exist or is deleted.
+    pub async fn get_campaign(&self, id: Uuid) -> Result<Option<Campaign>, Error> {
+        let campaign = sqlx::query_as!(
+            Campaign,
+            r#"
+            SELECT id, name, status AS "status: CampaignStatus", budget, start_date, end_date, created_at, updated_at
+            FROM campaigns
+            WHERE id = $1 AND status != 'DELETED'
+            "#,
+            id
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(campaign)
+    }
 }
