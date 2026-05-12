@@ -52,3 +52,11 @@ pub struct Bid {
     pub adid: Option<String>,
     pub crid: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdEvent {
+    pub event_type: String, // e.g., "IMPRESSION" or "CLICK"
+    pub campaign_id: String,
+    pub bid_id: String,
+    pub timestamp_ms: u128,
+}

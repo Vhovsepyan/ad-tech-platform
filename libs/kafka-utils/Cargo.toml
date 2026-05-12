@@ -9,3 +9,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 rskafka = { workspace = true }
 redis-utils = { version = "0.1.0", path = "../redis-utils" }
+chrono = "0.4.44"
