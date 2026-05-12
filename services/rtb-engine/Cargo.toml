@@ -5,11 +5,16 @@ edition = "2024"
 
 [dependencies]
 axum.workspace = true
-core-models = { version = "0.1.0", path = "../../libs/core-models" }
-kafka-utils = { version = "0.1.0", path = "../../libs/kafka-utils" }
-rskafka.workspace = true
-redis.workspace = true
-redis-utils = { version = "0.1.0", path = "../../libs/redis-utils" }
+tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+dotenvy.workspace = true
+rskafka.workspace = true
+redis.workspace = true
+async-trait.workspace = true
+
+# Your internal libraries
+core-models = { version = "0.1.0", path = "../../libs/core-models" }
+kafka-utils = { version = "0.1.0", path = "../../libs/kafka-utils" }
+redis-utils = { version = "0.1.0", path = "../../libs/redis-utils" }
+state = "0.6.0"

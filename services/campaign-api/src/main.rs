@@ -32,10 +32,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let database_url = env::var("DATABASE_URL")
+    dotenvy::dotenv().ok();
+
+    let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://adtech:secretpassword@localhost:5432/adtech_db".to_string());
 
-    let kafka_broker = env::var("KAFKA_BROKER")
+    let kafka_broker = std::env::var("KAFKA_BROKER")
         .unwrap_or_else(|_| "localhost:19092".to_string());
 
     tracing::info!("Connecting to database...");
