@@ -38,6 +38,23 @@ impl BiddingStrategy for ActiveCampaignStrategy {
         let imp = request.imp.first()?;
         let floor_price = imp.bidfloor.unwrap_or(0.0);
 
+        let mut dsp_uid = None;
+
+        // Try Web Cookie ID first
+        if let Some(user) = &request.user {
+            if let Some(buyeruid) = &user.buyeruid {
+                dsp_uid = Some(buyeruid.clone());
+            }
+        }
+
+        // Fallback to Mobile Device ID if no cookie exists
+        if dsp_uid.is_none() {
+            if let Some(device) = &request.device {
+                if let Some(ifa) = &device.ifa {
+                    dsp_uid = Some(ifa.clone());
+                }
+            }
+        }
         // 2. Fetch all active campaigns from the Redis Hash
         let active_campaigns = self.redis_manager.get_active_campaigns().await.unwrap_or_default();
 

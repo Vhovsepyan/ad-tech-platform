@@ -11,7 +11,7 @@ impl AudienceStore {
         let client = redis::Client::open(redis_url)?;
         Ok(Self { client })
     }
-
+  
     /// Fetches segment IDs for a user. Takes ~1ms.
     pub async fn get_segments(&self, dsp_user_id: &str) -> Vec<String> {
         let mut conn = match self.client.get_multiplexed_async_connection().await {

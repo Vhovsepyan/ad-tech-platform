@@ -9,6 +9,7 @@ pub struct BidRequest {
     pub imp: Vec<Impression>,
     pub site: Option<Site>,
     pub device: Option<Device>,
+    pub user: Option<User>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -27,6 +28,13 @@ pub struct Site {
 pub struct Device {
     pub ua: Option<String>,
     pub ip: Option<String>,
+    pub ifa: Option<String>, //Mobile hardware ID (IDFA/GAID)
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct User {
+    pub id: Option<String>,
+    pub buyeruid: Option<String>, // ADDED: Web DSP Cookie ID
 }
 
 // ==========================================
