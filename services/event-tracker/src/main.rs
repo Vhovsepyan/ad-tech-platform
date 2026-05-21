@@ -5,11 +5,13 @@ use axum::{
     routing::get,
     Router,
 };
-use core_models::AdEvent;
+use core_models::{AdEvent, EventType};
 use serde::Deserialize;
 use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use tokio::signal;
 
+// Replace the TRANSPARENT_GIF constant with this:
+const DEBUG_SVG: &[u8] = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"50\" height=\"50\"><rect width=\"50\" height=\"50\" fill=\"red\"/></svg>";
 const TRANSPARENT_GIF: &[u8] = &[
     0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff,
     0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
@@ -70,7 +72,7 @@ async fn track_impression(
 
     // Create the structured event
     let event = AdEvent {
-        event_type: "IMPRESSION".to_string(),
+        event_type: EventType::Impression,
         campaign_id: params.campaign_id,
         bid_id: params.bid_id,
         timestamp_ms: now_ms(),
@@ -86,7 +88,7 @@ async fn track_impression(
     headers.insert(header::CACHE_CONTROL, "no-store, no-cache, must-revalidate".parse().unwrap());
     headers.insert(header::PRAGMA, "no-cache".parse().unwrap());
 
-    (headers, TRANSPARENT_GIF)
+    (headers, DEBUG_SVG)
 }
 
 async fn track_click(
@@ -97,7 +99,7 @@ async fn track_click(
     let destination = params.r.unwrap_or_else(|| "https://google.com".to_string());
 
     let event = AdEvent {
-        event_type: "CLICK".to_string(),
+        event_type: EventType::Click,
         campaign_id: params.campaign_id,
         bid_id: params.bid_id,
         timestamp_ms: now_ms(),

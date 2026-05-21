@@ -55,8 +55,17 @@ pub struct Bid {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AdEvent {
-    pub event_type: String, // e.g., "IMPRESSION" or "CLICK"
+    pub event_type: EventType, // e.g., "IMPRESSION" or "CLICK"
     pub campaign_id: String,
     pub bid_id: String,
     pub timestamp_ms: u128,
+}
+
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum EventType {
+    Impression,
+    Click,
+    // Future proof: Easy to add VideoStart, Conversion, etc.
 }
