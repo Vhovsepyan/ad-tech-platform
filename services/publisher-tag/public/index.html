@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>The Daily News</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; line-height: 1.6; }
+        .article { background: #f4f4f4; padding: 20px; margin-bottom: 20px; }
+        .ad-container { margin: 20px 0; display: flex; justify-content: center; }
+    </style>
+</head>
+<body>
+<h1>Local Sports Team Wins Championship!</h1>
+
+<div class="article">
+    <p>It was a stunning victory last night. The crowd went wild as the final point was scored...</p>
+</div>
+
+<div class="ad-container">
+    <div id="ad-slot-1" data-ad-size="300x250"></div>
+</div>
+
+<div class="article">
+    <p>Coach commented on the strategy, saying it was exactly what they practiced...</p>
+</div>
+
+<script src="/tag.js"></script>
+<script>
+    // Initialize the ad slot as soon as the page loads
+    window.AdTech.requestAd("ad-slot-1");
+</script>
+</body>
+</html>

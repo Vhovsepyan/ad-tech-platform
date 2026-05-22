@@ -4,8 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-sqlx.workspace = true
-tokio.workspace = true
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dotenvy = { workspace = true }
+reqwest = { version = "0.12", features = ["json"] }
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+uuid = { version = "1.7", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+askama = "0.12"
+askama_axum = "0.4"
+core-models = { version = "0.1.0", path = "../../libs/core-models" }

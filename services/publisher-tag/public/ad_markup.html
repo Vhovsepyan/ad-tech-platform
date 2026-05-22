@@ -1,0 +1,10 @@
+<div style="width: 300px; height: 250px; border: 1px solid #ccc; font-family: sans-serif; position: relative;">
+    <a href="{{ tracker_url }}/track/click?campaign_id={{ campaign_id }}&bid_id={{ bid_id }}&price={{ price }}" target="_blank" style="text-decoration: none; color: black;">
+        <div style="padding: 20px; text-align: center; background: #f9f9f9; height: 100%; box-sizing: border-box;">
+            <h3 style="color: #d9534f; margin-top: 40px;">BREAKING OFFER</h3>
+            <p>Click here to claim your reward!</p>
+            <small style="color: #888;">Sponsored by {{ campaign_id }}</small>
+        </div>
+    </a>
+    <img src="{{ tracker_url }}/track/impression?campaign_id={{ campaign_id }}&bid_id={{ bid_id }}&price={{ price }}" width="1" height="1" style="position: absolute; bottom: 0; left: 0; opacity: 0;" />
+</div>
