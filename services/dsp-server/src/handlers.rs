@@ -19,6 +19,7 @@ pub struct AppState {
 pub struct RenderParams {
     pub auction_id: String,
     pub price: Option<f64>,
+    pub r: Option<String>,
 }
 
 #[instrument(skip(state), fields(creative = %creative_id))]
@@ -37,6 +38,10 @@ pub async fn serve_creative(
     // 2. Extract Campaign ID (Assuming creative_id format is "crid-<campaign_id>")
     let campaign_id = creative_id.replace("crid-", "");
     let price_str = params.price.unwrap_or(0.0).to_string();
+    let redirect_query_param = match &params.r {
+        Some(url) => format!("&r={}", url),
+        None => "".to_string(),
+    };
 
     // 3. O(n) Macro Substitution
     let rendered_html = state.macro_engine.render(
@@ -45,6 +50,7 @@ pub async fn serve_creative(
         &price_str,
         &campaign_id,
         &state.tracker_url,
+        &redirect_query_param,
     );
 
     // 4. Set CDN/Browser Caching Headers

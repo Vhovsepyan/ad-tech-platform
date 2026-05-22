@@ -13,6 +13,7 @@ impl MacroEngine {
             "[CLEARING_PRICE]",
             "[CAMPAIGN_ID]",
             "[DSP_TRACKER_URL]",
+            "[OPTIONAL_REDIRECT]",
         ];
 
         Self {
@@ -21,8 +22,8 @@ impl MacroEngine {
     }
 
     /// Replaces all macros in the raw creative HTML in a single pass O(n)
-    pub fn render(&self, raw_html: &str, auction_id: &str, price: &str, campaign_id: &str, tracker_url: &str) -> String {
-        let replacements = &[auction_id, price, campaign_id, tracker_url];
+    pub fn render(&self, raw_html: &str, auction_id: &str, price: &str, campaign_id: &str, tracker_url: &str, render_url: &str) -> String {
+        let replacements = &[auction_id, price, campaign_id, tracker_url, render_url];
         self.ac.replace_all(raw_html, replacements)
     }
 }
