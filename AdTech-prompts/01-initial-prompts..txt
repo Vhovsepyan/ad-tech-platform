@@ -34,7 +34,7 @@ Act as Principal Rust backend architect.
 I am building an AdTech production-ready product. 
 
 provide professional and best practice solution for:
-5.User Identity & Audience Service: audience-edge
+6.Publisher Ad Tag / Browser App: publisher-tag
 
 The first service is:
  Campaign Management API: campaign-api

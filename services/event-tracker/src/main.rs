@@ -23,6 +23,7 @@ pub struct TrackingParams {
     pub campaign_id: String,
     pub bid_id: String,
     pub r: Option<String>,
+    pub price: Option<f64>,
 }
 
 // 1. Define the Application State
@@ -75,6 +76,7 @@ async fn track_impression(
         event_type: EventType::Impression,
         campaign_id: params.campaign_id,
         bid_id: params.bid_id,
+        clearing_price: params.price,
         timestamp_ms: now_ms(),
     };
 
@@ -102,6 +104,7 @@ async fn track_click(
         event_type: EventType::Click,
         campaign_id: params.campaign_id,
         bid_id: params.bid_id,
+        clearing_price: params.price,
         timestamp_ms: now_ms(),
     };
 

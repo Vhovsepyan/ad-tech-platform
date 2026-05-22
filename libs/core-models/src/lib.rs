@@ -66,6 +66,7 @@ pub struct AdEvent {
     pub event_type: EventType, // e.g., "IMPRESSION" or "CLICK"
     pub campaign_id: String,
     pub bid_id: String,
+    pub clearing_price: Option<f64>,
     pub timestamp_ms: u128,
 }
 

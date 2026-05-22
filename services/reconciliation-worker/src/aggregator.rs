@@ -29,7 +29,8 @@ impl BatchAggregator {
             match event.event_type {
                 EventType::Impression => {
                     metrics.impressions += 1;
-                    metrics.spend += 0.002; // $2.00 CPM
+                    let cpm = event.clearing_price.unwrap_or(2.0);
+                    metrics.spend += cpm / 1000.0;
                 }
                 EventType::Click => {
                     metrics.clicks += 1;
