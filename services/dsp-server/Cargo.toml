@@ -4,8 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-sqlx.workspace = true
-tokio.workspace = true
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dotenvy = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+redis = { version = "0.24", features = ["tokio-comp"] }
+# The Enterprise Secret Weapons:
+moka = { version = "0.12", features = ["future"] } # High-concurrency local cache
+aho-corasick = "1.1"
+tower-http = "0.6.11" # O(n) multi-pattern string replacement

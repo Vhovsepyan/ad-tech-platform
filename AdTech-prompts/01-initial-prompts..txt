@@ -34,7 +34,7 @@ Act as Principal Rust backend architect.
 I am building an AdTech production-ready product. 
 
 provide professional and best practice solution for:
-6.Publisher Ad Tag / Browser App: publisher-tag
+7.Demand-Side Platform (DSP) / Creative Ad Server: dsp-server
 
 The first service is:
  Campaign Management API: campaign-api
