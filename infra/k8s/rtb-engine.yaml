@@ -27,6 +27,8 @@ spec:
               value: "redpanda:9092"
             - name: KAFKA_CAMPAIGN_TOPIC
               value: "campaign-updates"
+            - name: AUDIENCE_EDGE_URL
+              value: "http://audience-edge-service:8083"
             - name: RUST_LOG
               value: "info"
 

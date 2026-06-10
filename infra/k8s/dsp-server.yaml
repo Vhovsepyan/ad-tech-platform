@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dsp-server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dsp-server
+  template:
+    metadata:
+      labels:
+        app: dsp-server
+    spec:
+      containers:
+        - name: dsp-server
+          image: adtech-dsp-server:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8085
+          env:
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: EVENT_TRACKER_URL
+              value: "http://event-tracker-service:8082"
+            - name: RUST_LOG
+              value: "info"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dsp-server-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: dsp-server
+  ports:
+    - protocol: TCP
+      port: 8085
+      targetPort: 8085

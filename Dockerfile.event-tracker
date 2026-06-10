@@ -1,0 +1,11 @@
+FROM rust:slim AS builder
+WORKDIR /usr/src/adtech
+COPY . .
+RUN cargo build --release --bin event-tracker
+
+FROM debian:bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/src/adtech/target/release/event-tracker /app/event-tracker
+EXPOSE 8082
+CMD ["./event-tracker"]

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campaign-api-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: campaign-api
+  template:
+    metadata:
+      labels:
+        app: campaign-api
+    spec:
+      containers:
+        - name: campaign-api
+          image: adtech-campaign-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: "postgres://adtech:secretpassword@postgres:5432/adtech_db"
+            - name: KAFKA_BROKER
+              value: "redpanda:9092"
+            - name: KAFKA_CAMPAIGN_TOPIC
+              value: "campaign-updates"
+            - name: RUST_LOG
+              value: "info"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campaign-api-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: campaign-api
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

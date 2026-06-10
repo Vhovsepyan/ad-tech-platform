@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reconciliation-worker-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reconciliation-worker
+  template:
+    metadata:
+      labels:
+        app: reconciliation-worker
+    spec:
+      containers:
+        - name: reconciliation-worker
+          image: adtech-reconciliation-worker:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              value: "postgres://adtech:secretpassword@postgres:5432/adtech_db"
+            - name: KAFKA_BROKERS
+              value: "redpanda:9092"
+            - name: KAFKA_EVENTS_TOPIC
+              value: "ad_events"

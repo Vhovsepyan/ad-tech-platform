@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audience-edge-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: audience-edge
+  template:
+    metadata:
+      labels:
+        app: audience-edge
+    spec:
+      containers:
+        - name: audience-edge
+          image: adtech-audience-edge:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          env:
+            - name: AUDIENCE_REDIS_URL
+              value: "redis://redis:6379"
+            - name: ALLOWED_REDIRECT_HOSTS
+              value: "ib.adnxs.com,ads.openx.net,cm.g.doubleclick.net"
+            - name: COOKIE_DOMAIN
+              value: ".localhost"
+            - name: RUST_LOG
+              value: "info"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audience-edge-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: audience-edge
+  ports:
+    - protocol: TCP
+      port: 8083
+      targetPort: 8083

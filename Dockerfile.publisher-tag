@@ -1,0 +1,13 @@
+FROM rust:slim AS builder
+WORKDIR /usr/src/adtech
+COPY . .
+RUN cargo build --release --bin publisher-tag
+
+FROM debian:bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/src/adtech/target/release/publisher-tag /app/publisher-tag
+# Static files must be at the same relative path the binary expects at runtime
+COPY --from=builder /usr/src/adtech/services/publisher-tag/public /app/services/publisher-tag/public
+EXPOSE 8084
+CMD ["./publisher-tag"]

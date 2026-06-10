@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: publisher-tag-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: publisher-tag
+  template:
+    metadata:
+      labels:
+        app: publisher-tag
+    spec:
+      containers:
+        - name: publisher-tag
+          image: adtech-publisher-tag:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+          env:
+            - name: RTB_ENGINE_URL
+              value: "http://rtb-engine-service:8081/bid"
+            - name: EVENT_TRACKER_URL
+              value: "http://event-tracker-service:8082"
+            - name: RUST_LOG
+              value: "info"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: publisher-tag-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: publisher-tag
+  ports:
+    - protocol: TCP
+      port: 8084
+      targetPort: 8084
