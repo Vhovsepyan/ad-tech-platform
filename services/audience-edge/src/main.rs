@@ -28,9 +28,13 @@ async fn main() {
         println!("Allowed redirect hosts: {:?}", allowed_redirect_hosts);
     }
 
+    let cookie_domain = env::var("COOKIE_DOMAIN")
+        .expect("COOKIE_DOMAIN is required (e.g. .yourdsp.com)");
+
     let state = Arc::new(AppState {
         store: Arc::new(store),
         allowed_redirect_hosts,
+        cookie_domain,
     });
 
     let app = Router::new()

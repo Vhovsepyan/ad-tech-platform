@@ -53,7 +53,7 @@ pub async fn cookie_sync(
         None => {
             let new_uid = Uuid::new_v4().to_string();
             let cookie = Cookie::build((DSP_COOKIE_NAME, new_uid.clone()))
-                .domain(".yourdsp.com")
+                .domain(state.cookie_domain.clone())
                 .path("/")
                 .secure(true)
                 .http_only(true)
