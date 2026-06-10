@@ -1,37 +1,130 @@
+version: '3.8'
+
+# 1. Custom Network: Isolates our AdTech stack from other containers on your machine
+networks:
+  adtech-net:
+    driver: bridge
+
+# 2. Named Volumes: This is where the actual data lives on your hard drive
+volumes:
+  redpanda-data:
+  redis-data:
+  postgres-data:
+  clickhouse-data:
 
 services:
-  # Best Practice: Use Redpanda as a drop-in Kafka replacement for local dev (lighter, faster)
+  # -----------------------------------------
+  # MESSAGE BROKER: Redpanda (Kafka API)
+  # -----------------------------------------
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: adtech-redpanda
     command:
-      - redpanda start
-      - --smp 1
-      - --overprovisioned
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - redpanda
+      - start
+      - --mode=dev-container # Best Practice: Tells Redpanda to bypass production hardware checks on Windows/Mac
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
     ports:
       - "19092:19092"
       - "9644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks:
+      - adtech-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
-  # Redis for Audience Edge and RTB caching
+  # -----------------------------------------
+  # L1/L2 CACHE: Redis
+  # -----------------------------------------
   redis:
     image: redis:7-alpine
+    container_name: adtech-redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - adtech-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # PostgreSQL for Campaign API and DSP (relational data)
+  # -----------------------------------------
+  # CORE DATABASE: PostgreSQL
+  # -----------------------------------------
   postgres:
     image: postgres:15-alpine
+    container_name: adtech-postgres
     environment:
       POSTGRES_USER: adtech
       POSTGRES_PASSWORD: secretpassword
       POSTGRES_DB: adtech_db
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - adtech-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adtech -d adtech_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # Best Practice Add-on: ClickHouse for Event Tracking (Trillions of rows)
+  # -----------------------------------------
+  # ANALYTICS ENGINE: ClickHouse
+  # -----------------------------------------
   clickhouse:
     image: clickhouse/clickhouse-server:latest
+    container_name: adtech-clickhouse
+    environment:
+      # Automatically initialize the events database and credentials
+      CLICKHOUSE_DB: adtech_events
+      CLICKHOUSE_USER: adtech
+      CLICKHOUSE_PASSWORD: secretpassword
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "8123:8123" # HTTP Port
+      - "9000:9000" # Native TCP Port
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - adtech-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+
+  # -----------------------------------------
+  # THE DSP TRADING BRAIN
+  # -----------------------------------------
+  rtb-engine:
+    image: adtech-rtb-engine:local # Tells compose to use the image you already built
+    container_name: adtech-rtb-engine
+    environment:
+      # Use the internal Docker DNS names instead of localhost!
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=redpanda:9092
+      - KAFKA_CAMPAIGN_TOPIC=campaign-updates
+      - RUST_LOG=info # Good practice to set logging level explicitly
+    ports:
+      - "8081:8081"
+    networks:
+      - adtech-net
+    depends_on:
+      # The engine will WAIT to boot until Redis and Redpanda pass their healthchecks
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy

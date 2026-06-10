@@ -17,6 +17,9 @@ pub struct CreateCampaignRequest {
     #[validate(length(min = 3))]
     pub name: String,
     pub budget: rust_decimal::Decimal,
+    pub max_cpm: rust_decimal::Decimal,
+    /// Audience segment IDs to target. Omit or send [] for run-of-network.
+    pub target_segments: Option<Vec<String>>,
     pub start_date: chrono::DateTime<chrono::Utc>,
     pub end_date: chrono::DateTime<chrono::Utc>,
 }
@@ -75,6 +78,8 @@ async fn create_campaign(
         name: payload.name,
         status: crate::domain::campaign::CampaignStatus::Paused,
         budget: payload.budget,
+        max_cpm: payload.max_cpm,
+        target_segments: payload.target_segments.unwrap_or_default(),
         start_date: payload.start_date,
         end_date: payload.end_date,
         created_at: now,

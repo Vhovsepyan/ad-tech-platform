@@ -40,6 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kafka_broker = std::env::var("KAFKA_BROKER")
         .unwrap_or_else(|_| "localhost:19092".to_string());
 
+    let kafka_campaign_topic = std::env::var("KAFKA_CAMPAIGN_TOPIC")
+        .unwrap_or_else(|_| "campaign-updates".to_string());
+
     tracing::info!("Connecting to database...");
 
     let pool = PgPoolOptions::new()
@@ -53,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Database migrations applied successfully.");
 
     // Initialize Kafka Publisher
-    let publisher = CampaignEventPublisher::new(vec![kafka_broker], "campaign_updates").await?;
+    let publisher = CampaignEventPublisher::new(vec![kafka_broker], &kafka_campaign_topic).await?;
 
     let state = AppState {
         db_pool: pool,

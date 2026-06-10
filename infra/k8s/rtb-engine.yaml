@@ -1,0 +1,46 @@
+# 1. THE DEPLOYMENT
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtb-engine-deployment
+spec:
+  replicas: 3 # Scaling to 3 instances!
+  selector:
+    matchLabels:
+      app: rtb-engine
+  template:
+    metadata:
+      labels:
+        app: rtb-engine
+    spec:
+      containers:
+        - name: rtb-engine
+          image: adtech-rtb-engine:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          env:
+            # The DNS Shift: Pointing directly to internal K8s Services
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: KAFKA_BROKERS
+              value: "redpanda:9092"
+            - name: KAFKA_CAMPAIGN_TOPIC
+              value: "campaign-updates"
+            - name: RUST_LOG
+              value: "info"
+
+---
+# 2. THE SERVICE (Load Balancer)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtb-engine-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: rtb-engine
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081

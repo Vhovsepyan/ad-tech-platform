@@ -22,11 +22,16 @@ async fn main() {
         .await
         .expect("CRITICAL: Failed to connect to Postgres.");
     let repository = MetricsRepository::new(pool);
+    repository.ensure_offset_table().await;
 
     // 2. Initialize Infrastructure (Kafka)
     let brokers = env::var("KAFKA_BROKERS").unwrap_or_else(|_| "localhost:19092".into());
     let topic = env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| "ad_events".into());
-    let mut consumer = EventConsumer::new(vec![brokers], topic)
+
+    let initial_offset = repository.load_offset(&topic).await;
+    println!("Resuming from Kafka offset {}", initial_offset);
+
+    let mut consumer = EventConsumer::new(vec![brokers], topic.clone(), initial_offset)
         .await
         .expect("CRITICAL: Failed to connect to Kafka.");
 
@@ -60,6 +65,7 @@ async fn main() {
         if (last_flush.elapsed() >= Duration::from_secs(5) && !aggregator.is_empty()) || aggregator.len() > 5000 {
             let batch = aggregator.drain_batch();
             repository.flush_batch(batch).await;
+            repository.save_offset(&topic, consumer.current_offset).await;
             last_flush = Instant::now();
         }
     }

@@ -39,7 +39,16 @@ async fn main() {
     // ------------------------------------
 
     // 4. Initialize State
-    let active_strategy = bidding::ActiveCampaignStrategy::new(redis_manager.clone());
+    let audience_edge_url = std::env::var("AUDIENCE_EDGE_URL")
+        .unwrap_or_else(|_| "http://localhost:8083".to_string());
+
+    let http_client = reqwest::Client::new();
+
+    let active_strategy = bidding::ActiveCampaignStrategy::new(
+        redis_manager.clone(),
+        http_client,
+        audience_edge_url,
+    );
 
     let state = Arc::new(AppState {
         bidding_engine: Arc::new(active_strategy),

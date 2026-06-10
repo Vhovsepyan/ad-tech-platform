@@ -17,14 +17,16 @@ impl CampaignRepository {
         let inserted_campaign = sqlx::query_as!(
             Campaign,
             r#"
-            INSERT INTO campaigns (id, name, status, budget, start_date, end_date)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, name, status AS "status: CampaignStatus", budget, start_date, end_date, created_at, updated_at
+            INSERT INTO campaigns (id, name, status, budget, max_cpm, target_segments, start_date, end_date)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, name, status AS "status: CampaignStatus", budget, max_cpm, target_segments, start_date, end_date, created_at, updated_at
             "#,
             campaign.id,
             campaign.name,
             campaign.status as CampaignStatus,
             campaign.budget,
+            campaign.max_cpm,
+            &campaign.target_segments as &[String],
             campaign.start_date,
             campaign.end_date
         )
@@ -46,7 +48,7 @@ impl CampaignRepository {
             UPDATE campaigns
             SET status = $1
             WHERE id = $2 AND status != 'DELETED'
-            RETURNING id, name, status AS "status: CampaignStatus", budget, start_date, end_date, created_at, updated_at
+            RETURNING id, name, status AS "status: CampaignStatus", budget, max_cpm, target_segments, start_date, end_date, created_at, updated_at
             "#,
             new_status as CampaignStatus,
             id
@@ -63,7 +65,7 @@ impl CampaignRepository {
         let campaigns = sqlx::query_as!(
             Campaign,
             r#"
-            SELECT id, name, status AS "status: CampaignStatus", budget, start_date, end_date, created_at, updated_at
+            SELECT id, name, status AS "status: CampaignStatus", budget, max_cpm, target_segments, start_date, end_date, created_at, updated_at
             FROM campaigns
             WHERE status != 'DELETED'
             ORDER BY created_at DESC
@@ -83,7 +85,7 @@ impl CampaignRepository {
         let campaign = sqlx::query_as!(
             Campaign,
             r#"
-            SELECT id, name, status AS "status: CampaignStatus", budget, start_date, end_date, created_at, updated_at
+            SELECT id, name, status AS "status: CampaignStatus", budget, max_cpm, target_segments, start_date, end_date, created_at, updated_at
             FROM campaigns
             WHERE id = $1 AND status != 'DELETED'
             "#,

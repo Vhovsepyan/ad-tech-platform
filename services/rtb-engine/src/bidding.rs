@@ -3,6 +3,11 @@ use core_models::{Bid, BidRequest, BidResponse, SeatBid};
 use redis_utils::RedisManager;
 use serde_json::Value;
 
+#[derive(serde::Deserialize)]
+struct AudienceResponse {
+    segments: Vec<String>,
+}
+
 /// Core async trait for pluggable bidding strategies
 #[async_trait]
 pub trait BiddingStrategy: Send + Sync {
@@ -23,11 +28,33 @@ impl BiddingStrategy for DefaultNoBidStrategy {
 /// The production strategy that checks Redis for active budgets
 pub struct ActiveCampaignStrategy {
     redis_manager: RedisManager,
+    http_client: reqwest::Client,
+    audience_edge_url: String,
 }
 
 impl ActiveCampaignStrategy {
-    pub fn new(redis_manager: RedisManager) -> Self {
-        Self { redis_manager }
+    pub fn new(redis_manager: RedisManager, http_client: reqwest::Client, audience_edge_url: String) -> Self {
+        Self { redis_manager, http_client, audience_edge_url }
+    }
+
+    /// Fetches audience segments for a user from audience-edge.
+    /// Times out aggressively to stay well within the bid deadline. Fails open (empty vec).
+    async fn fetch_user_segments(&self, dsp_uid: &str) -> Vec<String> {
+        let url = format!("{}/internal/audience/{}", self.audience_edge_url, dsp_uid);
+        let result = self.http_client
+            .get(&url)
+            .timeout(std::time::Duration::from_millis(10))
+            .send()
+            .await;
+
+        match result {
+            Ok(resp) if resp.status().is_success() => {
+                resp.json::<AudienceResponse>().await
+                    .map(|r| r.segments)
+                    .unwrap_or_default()
+            }
+            _ => vec![],
+        }
     }
 }
 
@@ -62,7 +89,14 @@ impl BiddingStrategy for ActiveCampaignStrategy {
             return None; // No active campaigns in memory
         }
 
-        // 3. Find a matching campaign
+        // 3. Enrich with audience segments when a user identity is available.
+        //    Fail open: if audience-edge is down, only run-of-network campaigns will match.
+        let user_segments: Vec<String> = match &dsp_uid {
+            Some(uid) => self.fetch_user_segments(uid).await,
+            None => vec![],
+        };
+
+        // 4. Find a matching campaign
         let mut selected_campaign_id = None;
         let mut final_bid_price = 0.0;
 
@@ -70,9 +104,21 @@ impl BiddingStrategy for ActiveCampaignStrategy {
             if let Ok(parsed) = serde_json::from_str::<Value>(&campaign_json) {
                 let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
 
-                // Assuming your campaign-api saves a "max_cpm" or similar budget field.
-                // For safety in this phase, we default to $2.00 if the field is missing.
-                let max_cpm = parsed.get("max_cpm").and_then(|v| v.as_f64()).unwrap_or(2.0);
+                let Some(max_cpm) = parsed.get("max_cpm").and_then(|v| v.as_f64()) else {
+                    continue;
+                };
+
+                // Audience targeting: empty target_segments = run-of-network (matches all).
+                let target_segments: Vec<String> = parsed
+                    .get("target_segments")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default();
+
+                if !target_segments.is_empty()
+                    && !user_segments.iter().any(|s| target_segments.contains(s))
+                {
+                    continue; // User not in this campaign's target audience
+                }
 
                 if max_cpm > floor_price {
                     selected_campaign_id = Some(id.to_string());
@@ -86,7 +132,7 @@ impl BiddingStrategy for ActiveCampaignStrategy {
             }
         }
 
-        // 4. Construct the OpenRTB BidResponse
+        // 5. Construct the OpenRTB BidResponse
         if let Some(campaign_id) = selected_campaign_id {
             let bid = Bid {
                 // Generate a fast, unique bid ID by combining imp ID and campaign ID

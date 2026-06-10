@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 dotenvy = { workspace = true }
 redis = { version = "0.24", features = ["tokio-comp"] }
 uuid = { version = "1.7", features = ["v4", "fast-rng"] }
+url = "2"

@@ -1,0 +1,29 @@
+# ==========================================
+# Stage 1: The Builder
+# ==========================================
+FROM rust:slim AS builder
+WORKDIR /usr/src/adtech
+
+# Copy the entire workspace (services and libs) into the container
+COPY . .
+
+# Build ONLY the rtb-engine binary in highly-optimized release mode
+RUN cargo build --release --bin rtb-engine
+
+# ==========================================
+# Stage 2: The Minimal Runtime
+# ==========================================
+FROM debian:bookworm-slim
+WORKDIR /app
+
+# Install SSL certificates (required for your engine to make external HTTP calls)
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /usr/src/adtech/target/release/rtb-engine /app/rtb-engine
+
+# Expose the RTB Engine port
+EXPOSE 8081
+
+# Execute the binary
+CMD ["./rtb-engine"]

@@ -3,6 +3,8 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+const PARTITION: i32 = 0;
+
 /// Handles all persistence logic for reconciliation data
 pub struct MetricsRepository {
     pool: PgPool,
@@ -11,6 +13,52 @@ pub struct MetricsRepository {
 impl MetricsRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Creates the offset tracking table if it doesn't already exist.
+    pub async fn ensure_offset_table(&self) {
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS kafka_offsets (
+                topic     TEXT NOT NULL,
+                partition INT  NOT NULL,
+                offset    BIGINT NOT NULL,
+                PRIMARY KEY (topic, partition)
+            )",
+        )
+        .execute(&self.pool)
+        .await
+        .expect("CRITICAL: Failed to create kafka_offsets table");
+    }
+
+    /// Returns the last committed offset for a topic, or 0 if none recorded yet.
+    pub async fn load_offset(&self, topic: &str) -> i64 {
+        sqlx::query_scalar(
+            "SELECT offset FROM kafka_offsets WHERE topic = $1 AND partition = $2",
+        )
+        .bind(topic)
+        .bind(PARTITION)
+        .fetch_optional(&self.pool)
+        .await
+        .unwrap_or(None)
+        .unwrap_or(0)
+    }
+
+    /// Upserts the committed offset for a topic after a successful flush.
+    pub async fn save_offset(&self, topic: &str, offset: i64) {
+        let result = sqlx::query(
+            "INSERT INTO kafka_offsets (topic, partition, offset)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (topic, partition) DO UPDATE SET offset = EXCLUDED.offset",
+        )
+        .bind(topic)
+        .bind(PARTITION)
+        .bind(offset)
+        .execute(&self.pool)
+        .await;
+
+        if let Err(e) = result {
+            println!("Warning: Failed to persist Kafka offset: {}", e);
+        }
     }
 
     /// Executes highly optimized UPDATE queries to sync the batch to Postgres

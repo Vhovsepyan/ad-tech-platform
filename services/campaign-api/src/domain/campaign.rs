@@ -25,8 +25,17 @@ pub struct Campaign {
 
     pub status: CampaignStatus,
 
-    #[validate(custom(function = "validate_positive_budget"))]
+    #[validate(custom(function = "validate_positive_decimal"))]
     pub budget: Decimal,
+
+    /// Maximum bid price per thousand impressions (CPM) in USD.
+    /// The RTB engine will not bid above this price.
+    #[validate(custom(function = "validate_positive_decimal"))]
+    pub max_cpm: Decimal,
+
+    /// Audience segment IDs this campaign targets (e.g. ["seg-sports", "seg-auto"]).
+    /// Empty means run-of-network — the campaign bids on all users.
+    pub target_segments: Vec<String>,
 
     pub start_date: DateTime<Utc>,
 
@@ -37,11 +46,10 @@ pub struct Campaign {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Custom validation function to ensure the budget is strictly greater than zero.
-fn validate_positive_budget(budget: &Decimal) -> Result<(), ValidationError> {
-    if budget <= &Decimal::ZERO {
-        return Err(ValidationError::new("budget_must_be_positive")
-            .with_message("Campaign budget must be strictly greater than $0.00".into()));
+fn validate_positive_decimal(value: &Decimal) -> Result<(), ValidationError> {
+    if value <= &Decimal::ZERO {
+        return Err(ValidationError::new("must_be_positive")
+            .with_message("Value must be strictly greater than zero".into()));
     }
     Ok(())
 }

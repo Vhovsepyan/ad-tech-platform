@@ -8,7 +8,7 @@ pub struct EventConsumer {
 }
 
 impl EventConsumer {
-    pub async fn new(brokers: Vec<String>, topic: String) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(brokers: Vec<String>, topic: String, initial_offset: i64) -> Result<Self, Box<dyn std::error::Error>> {
         let client = ClientBuilder::new(brokers).build().await?;
         let partition_client = Arc::new(
             client
@@ -18,7 +18,7 @@ impl EventConsumer {
 
         Ok(Self {
             partition_client,
-            current_offset: 0,
+            current_offset: initial_offset,
         })
     }
 
