@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use core_models::{AdEvent, EventType};
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 use tokio::signal;
@@ -21,7 +22,7 @@ pub struct TrackingParams {
     pub campaign_id: String,
     pub bid_id: String,
     pub r: Option<String>,
-    pub price: Option<f64>,
+    pub price: Option<Decimal>,
 }
 
 // 1. Define the Application State

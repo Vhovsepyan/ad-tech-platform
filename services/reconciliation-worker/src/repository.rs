@@ -80,8 +80,7 @@ impl MetricsRepository {
                 SET
                     impressions = impressions + $1,
                     clicks = clicks + $2,
-                    -- FIX: Cast the Rust f64 to a Postgres Float, then to Numeric
-                    budget = budget - ($3::FLOAT8)::NUMERIC
+                    budget = budget - $3
                 WHERE id = $4
                 "#,
                 metrics.impressions,

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use core_models::{Bid, BidRequest, BidResponse, SeatBid};
 use redis_utils::RedisManager;
+use rust_decimal::Decimal;
 use serde_json::Value;
 
 #[derive(serde::Deserialize)]
@@ -63,7 +64,7 @@ impl BiddingStrategy for ActiveCampaignStrategy {
     async fn evaluate(&self, request: &BidRequest) -> Option<BidResponse> {
         // 1. Extract the impression and floor price (default to $0.0 if not specified)
         let imp = request.imp.first()?;
-        let floor_price = imp.bidfloor.unwrap_or(0.0);
+        let floor_price = imp.bidfloor.unwrap_or(Decimal::ZERO);
 
         let mut dsp_uid = None;
 
@@ -98,13 +99,14 @@ impl BiddingStrategy for ActiveCampaignStrategy {
 
         // 4. Find a matching campaign
         let mut selected_campaign_id = None;
-        let mut final_bid_price = 0.0;
+        let mut final_bid_price = Decimal::ZERO;
 
         for campaign_json in active_campaigns {
             if let Ok(parsed) = serde_json::from_str::<Value>(&campaign_json) {
                 let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
 
-                let Some(max_cpm) = parsed.get("max_cpm").and_then(|v| v.as_f64()) else {
+                let Some(max_cpm) = parsed.get("max_cpm")
+                    .and_then(|v| serde_json::from_value::<Decimal>(v.clone()).ok()) else {
                     continue;
                 };
 
@@ -125,7 +127,7 @@ impl BiddingStrategy for ActiveCampaignStrategy {
 
                     // AdTech Math: Bid slightly above the floor to win the auction safely
                     // (Second-price auction logic)
-                    final_bid_price = floor_price + 0.01;
+                    final_bid_price = floor_price + Decimal::new(1, 2);
 
                     break; // Stop at the first matching campaign to maintain sub-10ms latency
                 }

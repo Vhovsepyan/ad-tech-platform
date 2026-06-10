@@ -1,5 +1,6 @@
 use core_models::AdEvent;
 use core_models::EventType;
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 
 /// Represents the financial and engagement metrics for a single campaign
@@ -7,7 +8,7 @@ use std::collections::HashMap;
 pub struct CampaignMetrics {
     pub impressions: i32,
     pub clicks: i32,
-    pub spend: f64,
+    pub spend: Decimal,
 }
 
 /// Accumulates high-velocity events into memory-efficient micro-batches
@@ -29,12 +30,12 @@ impl BatchAggregator {
             match event.event_type {
                 EventType::Impression => {
                     metrics.impressions += 1;
-                    let cpm = event.clearing_price.unwrap_or(2.0);
-                    metrics.spend += cpm / 1000.0;
+                    let cpm = event.clearing_price.unwrap_or(Decimal::new(2, 0));
+                    metrics.spend += cpm / Decimal::from(1000);
                 }
                 EventType::Click => {
                     metrics.clicks += 1;
-                    metrics.spend += 0.05;  // $0.05 CPC
+                    metrics.spend += Decimal::new(5, 2); // $0.05 CPC
                 }
                 _ => {} // Ignore unknown event types safely
             }

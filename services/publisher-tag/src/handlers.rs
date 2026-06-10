@@ -2,6 +2,7 @@ use crate::state::AppState;
 use askama::Template;
 use axum::{extract::{Query, State}, response::{Html, IntoResponse}};
 use core_models::{BidRequest, Device, Impression, Site, User};
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{error, info, instrument, warn};
@@ -19,7 +20,7 @@ struct AdTemplate {
     tracker_url: String,
     campaign_id: String,
     bid_id: String,
-    price: f64,
+    price: Decimal,
 }
 
 /// The Mock SSP Layer: Translates a standard HTTP request into OpenRTB
@@ -36,7 +37,7 @@ pub async fn handle_ad_request(
         id: auction_id.clone(),
         imp: vec![Impression {
             id: params.slot_id.clone(),
-            bidfloor: Some(1.00),
+            bidfloor: Some(Decimal::new(100, 2)),
         }],
         site: Some(Site {
             id: Some("pub-espn-123".into()),

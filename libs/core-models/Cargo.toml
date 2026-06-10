@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 serde.workspace = true
+rust_decimal = { version = "1", features = ["serde-with-float"] }

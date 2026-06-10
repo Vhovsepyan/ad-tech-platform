@@ -16,4 +16,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 askama = "0.12"
 askama_axum = "0.4"
+rust_decimal = "1"
 core-models = { version = "0.1.0", path = "../../libs/core-models" }

@@ -13,6 +13,7 @@ rskafka.workspace = true
 redis.workspace = true
 async-trait.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rust_decimal = "1"
 
 # Your internal libraries
 core-models = { version = "0.1.0", path = "../../libs/core-models" }

@@ -4,6 +4,7 @@ use axum::{
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse},
 };
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{error, instrument};
@@ -18,7 +19,7 @@ pub struct AppState {
 #[derive(Deserialize, Debug)]
 pub struct RenderParams {
     pub auction_id: String,
-    pub price: Option<f64>,
+    pub price: Option<Decimal>,
     pub r: Option<String>,
 }
 
@@ -37,7 +38,7 @@ pub async fn serve_creative(
 
     // 2. Extract Campaign ID (Assuming creative_id format is "crid-<campaign_id>")
     let campaign_id = creative_id.replace("crid-", "");
-    let price_str = params.price.unwrap_or(0.0).to_string();
+    let price_str = params.price.unwrap_or(Decimal::ZERO).to_string();
     let redirect_query_param = match &params.r {
         Some(url) => format!("&r={}", url),
         None => "".to_string(),
