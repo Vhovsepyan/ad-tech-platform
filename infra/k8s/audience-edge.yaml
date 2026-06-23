@@ -23,8 +23,14 @@ spec:
               value: "redis://redis:6379"
             - name: ALLOWED_REDIRECT_HOSTS
               value: "ib.adnxs.com,ads.openx.net,cm.g.doubleclick.net"
+            # COOKIE_DOMAIN must start with a leading dot (e.g. ".yourdsp.com").
+            # Stored in a Secret — never hardcode here; .localhost is rejected by browsers
+            # on non-localhost origins and silently breaks cookie sync in any real cluster.
             - name: COOKIE_DOMAIN
-              value: ".localhost"
+              valueFrom:
+                secretKeyRef:
+                  name: audience-edge-secrets
+                  key: cookie-domain
             - name: RUST_LOG
               value: "info"
 

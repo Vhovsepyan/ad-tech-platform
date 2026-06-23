@@ -37,7 +37,8 @@ impl BatchAggregator {
                     metrics.clicks += 1;
                     metrics.spend += Decimal::new(5, 2); // $0.05 CPC
                 }
-                _ => {} // Ignore unknown event types safely
+                // No wildcard: exhaustive matching forces this file to be updated
+                // whenever a new EventType variant is added to core-models.
             }
         }
     }

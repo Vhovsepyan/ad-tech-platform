@@ -30,4 +30,19 @@ impl RedisManager {
         let _: () = conn.hdel("active_campaigns", campaign_id).await?;
         Ok(())
     }
+
+    /// Loads the last saved Kafka consumer offset, or 0 if none recorded yet.
+    pub async fn load_consumer_offset(&self, key: &str) -> i64 {
+        let mut conn = self.connection.clone();
+        conn.get::<_, Option<i64>>(key)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(0)
+    }
+
+    /// Persists the current Kafka consumer offset so restarts can resume without full replay.
+    pub async fn save_consumer_offset(&self, key: &str, offset: i64) {
+        let mut conn = self.connection.clone();
+        let _: RedisResult<()> = conn.set(key, offset).await;
+    }
 }

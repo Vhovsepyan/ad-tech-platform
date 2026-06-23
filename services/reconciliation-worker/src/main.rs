@@ -64,8 +64,7 @@ async fn main() {
         // 5. Check trigger conditions for a database flush (Every 5s OR if memory batch gets large)
         if (last_flush.elapsed() >= Duration::from_secs(5) && !aggregator.is_empty()) || aggregator.len() > 5000 {
             let batch = aggregator.drain_batch();
-            repository.flush_batch(batch).await;
-            repository.save_offset(&topic, consumer.current_offset).await;
+            repository.flush_and_commit(batch, consumer.current_offset, &topic).await;
             last_flush = Instant::now();
         }
     }

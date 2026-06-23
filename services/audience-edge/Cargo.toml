@@ -13,3 +13,4 @@ dotenvy = { workspace = true }
 redis = { version = "0.24", features = ["tokio-comp"] }
 uuid = { version = "1.7", features = ["v4", "fast-rng"] }
 url = "2"
+core-models = { version = "0.1.0", path = "../../libs/core-models" }

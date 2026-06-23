@@ -81,3 +81,10 @@ pub enum EventType {
     Click,
     // Future proof: Easy to add VideoStart, Conversion, etc.
 }
+
+/// Response from audience-edge's /internal/audience/:uid endpoint.
+/// Shared between audience-edge (serializer) and rtb-engine (deserializer).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AudienceResponse {
+    pub segments: Vec<String>,
+}

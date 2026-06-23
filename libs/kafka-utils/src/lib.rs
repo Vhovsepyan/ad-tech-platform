@@ -6,9 +6,12 @@ use rskafka::client::partition::Compression;
 use rskafka::record::Record;
 use tokio::sync::mpsc;
 
+const CAMPAIGN_CONSUMER_OFFSET_KEY: &str = "campaign_consumer_offset";
+
 pub struct CampaignConsumer {
     partition_client: Arc<PartitionClient>,
     redis_manager: RedisManager,
+    initial_offset: i64,
 }
 
 impl CampaignConsumer {
@@ -29,9 +32,15 @@ impl CampaignConsumer {
             UnknownTopicHandling::Retry // <-- Tells the engine to gracefully wait if the topic isn't ready
         ).await?);
 
+        let initial_offset = redis_manager
+            .load_consumer_offset(CAMPAIGN_CONSUMER_OFFSET_KEY)
+            .await;
+        println!("CampaignConsumer resuming from Kafka offset {}", initial_offset);
+
         Ok(Self {
             partition_client,
             redis_manager,
+            initial_offset,
         })
     }
 
@@ -39,10 +48,7 @@ impl CampaignConsumer {
     pub async fn run(&self) {
         println!("CampaignConsumer started listening for campaign updates...");
 
-        // Architect's Note: In a production system, we would commit this offset 
-        // back to Kafka or save it in Redis so we don't replay old messages on reboot. 
-        // For now, we start reading from offset 0 (full state rebuild on boot).
-        let mut current_offset = 0;
+        let mut current_offset = self.initial_offset;
 
         loop {
             // Fetch records: wait up to 1000ms for data, pulling max 10MB at a time
@@ -56,8 +62,12 @@ impl CampaignConsumer {
                         current_offset = record_and_offset.offset + 1;
                     }
 
-                    // If we've caught up to the newest message, sleep briefly to save CPU
+                    // When caught up, persist the offset so the next restart resumes here
+                    // instead of replaying the full topic history from 0.
                     if current_offset == high_watermark {
+                        self.redis_manager
+                            .save_consumer_offset(CAMPAIGN_CONSUMER_OFFSET_KEY, current_offset)
+                            .await;
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     }
                 }

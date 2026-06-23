@@ -43,44 +43,41 @@ impl MetricsRepository {
         .unwrap_or(0)
     }
 
-    /// Upserts the committed offset for a topic after a successful flush.
-    pub async fn save_offset(&self, topic: &str, offset: i64) {
-        let result = sqlx::query(
-            "INSERT INTO kafka_offsets (topic, partition, offset)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (topic, partition) DO UPDATE SET offset = EXCLUDED.offset",
-        )
-        .bind(topic)
-        .bind(PARTITION)
-        .bind(offset)
-        .execute(&self.pool)
-        .await;
+    /// Atomically writes all campaign metric updates and advances the Kafka offset in a
+    /// single transaction. Either both commit or neither does — preventing double-spend
+    /// on restart and preventing offset advancement when metric writes fail.
+    pub async fn flush_and_commit(
+        &self,
+        batch: HashMap<String, CampaignMetrics>,
+        offset: i64,
+        topic: &str,
+    ) {
+        let mut tx = match self.pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                eprintln!("CRITICAL: Failed to start transaction: {}. Batch will be retried.", e);
+                return;
+            }
+        };
 
-        if let Err(e) = result {
-            println!("Warning: Failed to persist Kafka offset: {}", e);
-        }
-    }
-
-    /// Executes highly optimized UPDATE queries to sync the batch to Postgres
-    pub async fn flush_batch(&self, batch: HashMap<String, CampaignMetrics>) {
         println!("Flushing metrics for {} campaigns to Postgres...", batch.len());
 
         for (campaign_id, metrics) in batch {
             let parsed_uuid = match Uuid::parse_str(&campaign_id) {
                 Ok(id) => id,
                 Err(_) => {
-                    println!("Warning: Invalid UUID format for campaign {}", campaign_id);
+                    eprintln!("Warning: Skipping invalid campaign ID: {}", campaign_id);
                     continue;
                 }
             };
 
-            let result = sqlx::query!(
+            if let Err(e) = sqlx::query!(
                 r#"
                 UPDATE campaigns
                 SET
                     impressions = impressions + $1,
-                    clicks = clicks + $2,
-                    budget = budget - $3
+                    clicks      = clicks + $2,
+                    budget      = budget - $3
                 WHERE id = $4
                 "#,
                 metrics.impressions,
@@ -88,13 +85,38 @@ impl MetricsRepository {
                 metrics.spend,
                 parsed_uuid
             )
-                .execute(&self.pool)
-                .await;
-
-            match result {
-                Ok(_) => println!("💰 Deducted ${:.3} from campaign {}", metrics.spend, campaign_id),
-                Err(e) => println!("Error updating campaign {}: {}", campaign_id, e),
+            .execute(&mut *tx)
+            .await
+            {
+                eprintln!(
+                    "CRITICAL: Campaign UPDATE failed for {}: {}. Rolling back batch.",
+                    campaign_id, e
+                );
+                let _ = tx.rollback().await;
+                return;
             }
+
+            println!("Deducted ${:.4} from campaign {}", metrics.spend, campaign_id);
+        }
+
+        if let Err(e) = sqlx::query(
+            "INSERT INTO kafka_offsets (topic, partition, offset)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (topic, partition) DO UPDATE SET offset = EXCLUDED.offset",
+        )
+        .bind(topic)
+        .bind(PARTITION)
+        .bind(offset)
+        .execute(&mut *tx)
+        .await
+        {
+            eprintln!("CRITICAL: Offset save failed: {}. Rolling back batch.", e);
+            let _ = tx.rollback().await;
+            return;
+        }
+
+        if let Err(e) = tx.commit().await {
+            eprintln!("CRITICAL: Commit failed: {}. Batch will be retried on restart.", e);
         }
     }
 }

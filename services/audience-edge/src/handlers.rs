@@ -6,7 +6,8 @@ use axum::{
     Json,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
-use serde::{Deserialize, Serialize};
+use core_models::AudienceResponse;
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -76,11 +77,6 @@ pub async fn cookie_sync(
     // 4. Redirect back to the exchange with our DSP ID attached
     let final_url = params.return_url.replace("${DSP_UID}", &dsp_uid);
     (updated_jar, Redirect::temporary(&final_url)).into_response()
-}
-
-#[derive(Serialize)]
-pub struct AudienceResponse {
-    pub segments: Vec<String>,
 }
 
 /// INTERNAL: Called by the RTB Engine during an auction

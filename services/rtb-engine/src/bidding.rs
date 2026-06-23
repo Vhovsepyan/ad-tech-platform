@@ -1,13 +1,11 @@
 use async_trait::async_trait;
-use core_models::{Bid, BidRequest, BidResponse, SeatBid};
+use core_models::{AudienceResponse, Bid, BidRequest, BidResponse, SeatBid};
+use moka::future::Cache;
 use redis_utils::RedisManager;
 use rust_decimal::Decimal;
 use serde_json::Value;
-
-#[derive(serde::Deserialize)]
-struct AudienceResponse {
-    segments: Vec<String>,
-}
+use std::time::Duration;
+use url::Url;
 
 /// Core async trait for pluggable bidding strategies
 #[async_trait]
@@ -31,20 +29,48 @@ pub struct ActiveCampaignStrategy {
     redis_manager: RedisManager,
     http_client: reqwest::Client,
     audience_edge_url: String,
+    /// Caches user→segments lookups for 60 s. Audience data changes at most once per session;
+    /// caching collapses the per-bid HTTP round-trip that would otherwise time out under load.
+    segment_cache: Cache<String, Vec<String>>,
 }
 
 impl ActiveCampaignStrategy {
     pub fn new(redis_manager: RedisManager, http_client: reqwest::Client, audience_edge_url: String) -> Self {
-        Self { redis_manager, http_client, audience_edge_url }
+        let segment_cache = Cache::builder()
+            .max_capacity(50_000)
+            .time_to_live(Duration::from_secs(60))
+            .build();
+        Self { redis_manager, http_client, audience_edge_url, segment_cache }
     }
 
-    /// Fetches audience segments for a user from audience-edge.
-    /// Times out aggressively to stay well within the bid deadline. Fails open (empty vec).
+    /// Returns audience segments for a user, serving from the local cache when possible.
+    /// On a cache miss, fetches from audience-edge with a tight timeout. Fails open (empty vec).
     async fn fetch_user_segments(&self, dsp_uid: &str) -> Vec<String> {
-        let url = format!("{}/internal/audience/{}", self.audience_edge_url, dsp_uid);
+        if let Some(cached) = self.segment_cache.get(dsp_uid).await {
+            return cached;
+        }
+
+        let segments = self.fetch_user_segments_from_origin(dsp_uid).await;
+        self.segment_cache.insert(dsp_uid.to_string(), segments.clone()).await;
+        segments
+    }
+
+    async fn fetch_user_segments_from_origin(&self, dsp_uid: &str) -> Vec<String> {
+        // Use Url::path_segments_mut so dsp_uid is percent-encoded as a single path segment.
+        // Raw format!() interpolation would allow buyeruid="../admin" to reach other routes.
+        let url = match Url::parse(&self.audience_edge_url) {
+            Ok(mut u) => {
+                match u.path_segments_mut() {
+                    Ok(mut segs) => { segs.extend(["internal", "audience", dsp_uid]); }
+                    Err(_) => return vec![],
+                }
+                u
+            }
+            Err(_) => return vec![],
+        };
         let result = self.http_client
-            .get(&url)
-            .timeout(std::time::Duration::from_millis(10))
+            .get(url)
+            .timeout(Duration::from_millis(10))
             .send()
             .await;
 

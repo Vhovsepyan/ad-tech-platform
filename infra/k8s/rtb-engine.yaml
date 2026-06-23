@@ -33,13 +33,13 @@ spec:
               value: "info"
 
 ---
-# 2. THE SERVICE (Load Balancer)
+# 2. THE SERVICE (ClusterIP: only called internally by publisher-tag)
 apiVersion: v1
 kind: Service
 metadata:
   name: rtb-engine-service
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: rtb-engine
   ports:
