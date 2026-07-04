@@ -12,4 +12,6 @@ sqlx = { workspace = true }
 rskafka = { workspace = true }
 uuid = { version = "1.7", features = ["v4"] }
 rust_decimal = "1"
+clickhouse = { version = "0.11", features = ["lz4"] }
 core-models = { version = "0.1.0", path = "../../libs/core-models" }
+redis-utils = { version = "0.1.0", path = "../../libs/redis-utils" }

@@ -40,6 +40,7 @@ async fn main() {
     let app = Router::new()
         .route("/sync", get(handlers::cookie_sync))
         .route("/internal/audience/:uid", get(handlers::lookup_audience))
+        .route("/internal/audience/:uid/segments", axum::routing::post(handlers::set_segments))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8083").await.unwrap();

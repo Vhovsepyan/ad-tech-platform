@@ -1,4 +1,3 @@
-use crate::domain::campaign::Campaign;
 use rskafka::{
     client::{
         partition::{PartitionClient, UnknownTopicHandling},
@@ -30,25 +29,16 @@ impl CampaignEventPublisher {
         })
     }
 
-    /// Publishes a Campaign to the Kafka topic
-    #[tracing::instrument(skip(self, campaign), fields(campaign_id = %campaign.id))]
-    pub async fn publish_campaign_event(&self, campaign: &Campaign) -> Result<(), Box<dyn std::error::Error>> {
-        // Serialize the full state to JSON for the RTB engine
-        let payload = serde_json::to_vec(campaign)?;
-
-        // Use the Campaign ID as the Kafka Key. This ensures that if we scale to multiple
-        // partitions later, all updates for a specific campaign go to the same partition.
-        let key = campaign.id.as_bytes().to_vec();
-
+    /// Publishes a pre-serialized JSON payload to the Kafka topic.
+    /// Used by the outbox poller, which already has the payload from the outbox row.
+    pub async fn publish_raw(&self, payload: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         let record = Record {
-            key: Some(key),
-            value: Some(payload),
+            key: None,
+            value: Some(payload.to_vec()),
             headers: std::collections::BTreeMap::new(),
             timestamp: chrono::Utc::now(),
         };
-
         self.partition_client.produce(vec![record], Default::default()).await?;
-
         Ok(())
     }
 }

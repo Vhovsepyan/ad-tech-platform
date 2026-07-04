@@ -30,6 +30,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/render/:creative_id", get(handlers::serve_creative))
+        .route("/creative/:creative_id", axum::routing::post(handlers::upsert_creative))
         .with_state(state)
         .layer(TraceLayer::new_for_http());
 

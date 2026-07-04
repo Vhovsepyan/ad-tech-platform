@@ -16,3 +16,4 @@ dotenvy = { workspace = true }
 rust_decimal = "1"
 core-models = { version = "0.1.0", path = "../../libs/core-models" }
 kafka-utils = { version = "0.1.0", path = "../../libs/kafka-utils" }
+redis-utils = { version = "0.1.0", path = "../../libs/redis-utils" }

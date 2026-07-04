@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Publisher Test Page</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    #ad-slot { width: 300px; height: 250px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; background: #f9f9f9; }
+  </style>
+</head>
+<body>
+  <h1>Publisher Test Page</h1>
+  <p>The ad slot below fetches a bid from the RTB engine and renders the winning creative.</p>
+  <div id="ad-slot">Loading ad...</div>
+  <script>
+    const dspUid = document.cookie.split(';')
+      .map(c => c.trim())
+      .find(c => c.startsWith('dsp_uid='))
+      ?.split('=')[1] || '';
+
+    fetch('/ssp/ad?slot_id=slot-300x250&dsp_uid=' + encodeURIComponent(dspUid))
+      .then(r => r.text())
+      .then(html => { document.getElementById('ad-slot').innerHTML = html; })
+      .catch(() => { document.getElementById('ad-slot').textContent = 'No ad available'; });
+  </script>
+</body>
+</html>

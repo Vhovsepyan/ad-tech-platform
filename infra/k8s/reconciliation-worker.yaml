@@ -23,3 +23,13 @@ spec:
               value: "redpanda:9092"
             - name: KAFKA_EVENTS_TOPIC
               value: "ad_events"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: CLICKHOUSE_URL
+              value: "http://clickhouse:8123"
+            - name: CLICKHOUSE_DB
+              value: "adtech_events"
+            - name: CLICKHOUSE_USER
+              value: "adtech"
+            - name: CLICKHOUSE_PASSWORD
+              value: "secretpassword"

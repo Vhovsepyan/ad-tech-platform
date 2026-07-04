@@ -16,9 +16,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rust_decimal = "1"
 url = "2"
 moka = { version = "0.12", features = ["future"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 # Your internal libraries
 core-models = { version = "0.1.0", path = "../../libs/core-models" }
 kafka-utils = { version = "0.1.0", path = "../../libs/kafka-utils" }
 redis-utils = { version = "0.1.0", path = "../../libs/redis-utils" }
-state = "0.6.0"

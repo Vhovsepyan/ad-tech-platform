@@ -13,7 +13,7 @@ serde_json.workspace = true
 sqlx.workspace = true
 time = { version = "0.3.47", features = ["formatting"] }
 tokio.workspace = true
-tower-http = { version = "0.6.10", features = ["cors", "trace", "request-id", "util"] }
+tower-http = { version = "0.6.10", features = ["trace", "request-id", "util"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 uuid = { version = "1.23.1", features = ["v4", "serde"] }

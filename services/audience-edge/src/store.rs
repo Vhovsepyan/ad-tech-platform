@@ -24,6 +24,14 @@ impl AudienceStore {
         }
     }
 
+    /// Writes audience segment IDs for a user. Overwrites any existing segments.
+    pub async fn set_segments(&self, dsp_user_id: &str, segments: &[String]) {
+        let mut conn = self.connection.clone();
+        let key = format!("uid:{}", dsp_user_id);
+        let value = segments.join(",");
+        let _: () = conn.set(key, value).await.unwrap_or(());
+    }
+
     /// Saves the mapping between an Ad Exchange ID and our DSP ID.
     pub async fn map_user(&self, exchange: &str, exchange_uid: &str, dsp_uid: &str) {
         let mut conn = self.connection.clone();

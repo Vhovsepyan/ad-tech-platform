@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     Json,
 };
+use serde::Serialize;
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use core_models::AudienceResponse;
 use serde::Deserialize;
@@ -85,6 +86,20 @@ pub async fn lookup_audience(
     axum::extract::Path(dsp_uid): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     let segments = state.store.get_segments(&dsp_uid).await;
-
     (StatusCode::OK, Json(AudienceResponse { segments }))
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct SetSegmentsRequest {
+    pub segments: Vec<String>,
+}
+
+/// INTERNAL: Write audience segments for a user (called by DMP pipelines or batch loaders)
+pub async fn set_segments(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(dsp_uid): axum::extract::Path<String>,
+    Json(body): Json<SetSegmentsRequest>,
+) -> impl IntoResponse {
+    state.store.set_segments(&dsp_uid, &body.segments).await;
+    StatusCode::NO_CONTENT
 }

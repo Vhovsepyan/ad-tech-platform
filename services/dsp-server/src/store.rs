@@ -20,6 +20,15 @@ impl CreativeStore {
         Self { l1_cache, redis_client }
     }
 
+    /// Writes raw HTML for a creative ID to Redis and invalidates the L1 cache entry.
+    pub async fn set_creative(&self, creative_id: &str, html: &str) -> Result<(), redis::RedisError> {
+        self.l1_cache.remove(creative_id).await;
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let key = format!("creative:{}", creative_id);
+        conn.set::<_, _, ()>(&key, html).await?;
+        Ok(())
+    }
+
     /// Fetches the raw HTML for a creative ID
     pub async fn get_creative(&self, creative_id: &str) -> Option<String> {
         // 1. Try L1 Cache (Nanosecond speed)

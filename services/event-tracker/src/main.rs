@@ -22,31 +22,32 @@ pub struct TrackingParams {
     pub campaign_id: String,
     pub bid_id: String,
     pub r: Option<String>,
-    pub price: Option<Decimal>,
 }
 
-// 1. Define the Application State
 pub struct AppState {
     pub producer: kafka_utils::AsyncEventProducer,
+    pub redis: redis_utils::RedisManager,
 }
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    println!("Initializing Event Tracker on Edge...");
+    println!("Initializing Event Tracker...");
 
-    // 2. Setup Kafka connection
     let kafka_brokers = std::env::var("KAFKA_BROKERS").unwrap_or_else(|_| "localhost:19092".into());
-    // We create a NEW topic for tracking data, separate from campaign updates
     let kafka_topic = std::env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| "ad_events".into());
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
 
     let producer = kafka_utils::AsyncEventProducer::new(vec![kafka_brokers], kafka_topic)
         .await
         .expect("CRITICAL: Failed to connect Producer to Kafka.");
 
-    let state = Arc::new(AppState { producer });
+    let redis = redis_utils::RedisManager::new(&redis_url)
+        .await
+        .expect("CRITICAL: Failed to connect to Redis.");
 
-    // 3. Mount routes with state
+    let state = Arc::new(AppState { producer, redis });
+
     let app = Router::new()
         .route("/healthz", get(|| async { StatusCode::OK }))
         .route("/track/impression", get(track_impression))
@@ -60,26 +61,30 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal()).await.unwrap();
 }
 
-/// Helper to get current time
 fn now_ms() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+}
+
+/// Looks up the authoritative clearing price for a bid_id from Redis.
+/// Returns None if the bid record is missing (e.g., expired or never stored).
+async fn resolve_clearing_price(state: &AppState, bid_id: &str) -> Option<Decimal> {
+    state.redis.get_bid_record(bid_id).await.ok().flatten()
 }
 
 async fn track_impression(
     State(state): State<Arc<AppState>>,
     Query(params): Query<TrackingParams>,
 ) -> impl IntoResponse {
+    let clearing_price = resolve_clearing_price(&state, &params.bid_id).await;
 
-    // Create the structured event
     let event = AdEvent {
         event_type: EventType::Impression,
         campaign_id: params.campaign_id,
         bid_id: params.bid_id,
-        clearing_price: params.price,
+        clearing_price,
         timestamp_ms: now_ms(),
     };
 
-    // Fire and forget (sub-millisecond operation)
     if let Ok(json_bytes) = serde_json::to_vec(&event) {
         state.producer.emit(json_bytes);
     }
@@ -96,18 +101,18 @@ async fn track_click(
     State(state): State<Arc<AppState>>,
     Query(params): Query<TrackingParams>,
 ) -> impl IntoResponse {
-
     let destination = params.r.unwrap_or_else(|| "https://google.com".to_string());
+
+    let clearing_price = resolve_clearing_price(&state, &params.bid_id).await;
 
     let event = AdEvent {
         event_type: EventType::Click,
         campaign_id: params.campaign_id,
         bid_id: params.bid_id,
-        clearing_price: params.price,
+        clearing_price,
         timestamp_ms: now_ms(),
     };
 
-    // Fire and forget
     if let Ok(json_bytes) = serde_json::to_vec(&event) {
         state.producer.emit(json_bytes);
     }
@@ -115,7 +120,6 @@ async fn track_click(
     Redirect::temporary(&destination).into_response()
 }
 
-/// Graceful Shutdown Handler (Standardized across our monorepo)
 async fn shutdown_signal() {
     let ctrl_c = async { signal::ctrl_c().await.expect("failed to install Ctrl+C handler"); };
     #[cfg(unix)]

@@ -1,21 +1,22 @@
 use redis_utils::RedisManager;
 use rskafka::client::{partition::{PartitionClient, UnknownTopicHandling}, ClientBuilder};
+use rust_decimal::Decimal;
 use serde_json::Value;
 use std::sync::Arc;
 use rskafka::client::partition::Compression;
 use rskafka::record::Record;
 use tokio::sync::mpsc;
 
-const CAMPAIGN_CONSUMER_OFFSET_KEY: &str = "campaign_consumer_offset";
-
 pub struct CampaignConsumer {
     partition_client: Arc<PartitionClient>,
     redis_manager: RedisManager,
-    initial_offset: i64,
 }
 
 impl CampaignConsumer {
-    /// Connects to the Kafka cluster and specific topic
+    /// Connects to the Kafka cluster and specific topic.
+    /// Always starts from offset 0 to rebuild the active_campaigns hash from the full topic history.
+    /// This is safe because campaign-updates contains the complete lifecycle (ACTIVE/PAUSED/DELETED)
+    /// for every campaign, so replaying it always converges to the correct state.
     pub async fn new(
         brokers: Vec<String>,
         topic: String,
@@ -24,51 +25,30 @@ impl CampaignConsumer {
         println!("Connecting to Kafka brokers: {:?}", brokers);
 
         let client = ClientBuilder::new(brokers).build().await?;
-        // In a massively scaled production environment, you would dynamically 
-        // assign partitions. For our architecture, Partition 0 is sufficient.
         let partition_client = Arc::new(client.partition_client(
             topic,
             0,
-            UnknownTopicHandling::Retry // <-- Tells the engine to gracefully wait if the topic isn't ready
+            UnknownTopicHandling::Retry,
         ).await?);
 
-        let initial_offset = redis_manager
-            .load_consumer_offset(CAMPAIGN_CONSUMER_OFFSET_KEY)
-            .await;
-        println!("CampaignConsumer resuming from Kafka offset {}", initial_offset);
-
-        Ok(Self {
-            partition_client,
-            redis_manager,
-            initial_offset,
-        })
+        Ok(Self { partition_client, redis_manager })
     }
 
-    /// The continuous polling loop that runs forever in the background
+    /// The continuous polling loop that runs forever in the background.
+    /// Starts from offset 0 and rebuilds Redis state; Kafka topic retention is the durability guarantee.
     pub async fn run(&self) {
-        println!("CampaignConsumer started listening for campaign updates...");
+        println!("CampaignConsumer started. Rebuilding active campaign cache from offset 0...");
 
-        let mut current_offset = self.initial_offset;
+        let mut current_offset: i64 = 0;
 
         loop {
-            // Fetch records: wait up to 1000ms for data, pulling max 10MB at a time
             match self.partition_client.fetch_records(current_offset, 1..10_000_000, 1000).await {
-                Ok((records, high_watermark)) => {
+                Ok((records, _high_watermark)) => {
                     for record_and_offset in records {
                         if let Some(payload_bytes) = record_and_offset.record.value {
                             self.process_message(&payload_bytes).await;
                         }
-                        // Advance the offset so we don't read this message again
                         current_offset = record_and_offset.offset + 1;
-                    }
-
-                    // When caught up, persist the offset so the next restart resumes here
-                    // instead of replaying the full topic history from 0.
-                    if current_offset == high_watermark {
-                        self.redis_manager
-                            .save_consumer_offset(CAMPAIGN_CONSUMER_OFFSET_KEY, current_offset)
-                            .await;
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     }
                 }
                 Err(e) => {
@@ -79,35 +59,51 @@ impl CampaignConsumer {
         }
     }
 
-    /// Parses the Kafka payload and updates Redis accordingly
+    /// Parses the Kafka payload and updates Redis accordingly.
+    /// For ACTIVE campaigns: syncs to the active_campaigns hash and initializes the budget counter.
+    /// For PAUSED/DELETED campaigns: evicts from the cache and removes the budget counter.
     async fn process_message(&self, payload: &[u8]) {
-        if let Ok(json_str) = String::from_utf8(payload.to_vec()) {
-            if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
+        let json_str = match String::from_utf8(payload.to_vec()) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let parsed = match serde_json::from_str::<Value>(&json_str) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
 
-                // Extract the UUID and Status from the JSON payload
-                if let (Some(id), Some(status)) = (
-                    parsed.get("id").and_then(|i| i.as_str()),
-                    parsed.get("status").and_then(|s| s.as_str()),
-                ) {
-                    match status {
-                        "ACTIVE" => {
-                            if let Err(e) = self.redis_manager.save_campaign(id, &json_str).await {
-                                println!("Failed to cache active campaign {}: {}", id, e);
-                            } else {
-                                println!("🟢 Campaign {} went ACTIVE. Synced to cache.", id);
-                            }
-                        }
-                        "PAUSED" | "DELETED" => {
-                            if let Err(e) = self.redis_manager.remove_campaign(id).await {
-                                println!("Failed to evict campaign {}: {}", id, e);
-                            } else {
-                                println!("🔴 Campaign {} {}. Evicted from cache.", id, status);
-                            }
-                        }
-                        _ => {} // Ignore other statuses like "PENDING_REVIEW"
+        let (Some(id), Some(status)) = (
+            parsed.get("id").and_then(|i| i.as_str()),
+            parsed.get("status").and_then(|s| s.as_str()),
+        ) else {
+            return;
+        };
+
+        match status {
+            "ACTIVE" => {
+                if let Err(e) = self.redis_manager.save_campaign(id, &json_str).await {
+                    println!("Failed to cache active campaign {}: {}", id, e);
+                } else {
+                    println!("Campaign {} went ACTIVE. Synced to cache.", id);
+                }
+                // Initialize budget counter from campaign JSON
+                let budget: Option<Decimal> = parsed.get("budget")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok());
+                if let Some(b) = budget {
+                    if let Err(e) = self.redis_manager.init_budget_counter(id, b).await {
+                        println!("Failed to init budget counter for {}: {}", id, e);
                     }
                 }
             }
+            "PAUSED" | "DELETED" => {
+                if let Err(e) = self.redis_manager.remove_campaign(id).await {
+                    println!("Failed to evict campaign {}: {}", id, e);
+                } else {
+                    println!("Campaign {} {}. Evicted from cache.", id, status);
+                }
+                let _ = self.redis_manager.delete_budget_counter(id).await;
+            }
+            _ => {}
         }
     }
 }
@@ -123,13 +119,11 @@ impl AsyncEventProducer {
         let partition_client = Arc::new(client.partition_client(
             topic,
             0,
-            rskafka::client::partition::UnknownTopicHandling::Retry
+            rskafka::client::partition::UnknownTopicHandling::Retry,
         ).await?);
 
-        // Create a massive in-memory queue capable of holding 100,000 pending events
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(100_000);
 
-        // Spawn the background worker to drain the queue into Kafka
         let pc = partition_client.clone();
         tokio::spawn(async move {
             println!("Kafka Background Producer running...");
@@ -141,8 +135,6 @@ impl AsyncEventProducer {
                     timestamp: chrono::Utc::now(),
                 };
 
-                // Fire to Kafka. (Architect Note: In production, we would buffer these
-                // and use a BatchProducer, but this is perfect for our current scale).
                 if let Err(e) = pc.produce(vec![record], Compression::NoCompression).await {
                     println!("Warning: Failed to produce to Kafka: {:?}", e);
                 }
@@ -154,7 +146,7 @@ impl AsyncEventProducer {
 
     /// Fire and forget. Takes 50 nanoseconds. Never blocks the HTTP thread.
     pub fn emit(&self, payload: Vec<u8>) {
-        if let Err(_) = self.sender.try_send(payload) {
+        if self.sender.try_send(payload).is_err() {
             println!("CRITICAL: Kafka queue is full! Dropping event.");
         }
     }

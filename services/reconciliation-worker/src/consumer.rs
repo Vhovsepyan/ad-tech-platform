@@ -1,18 +1,22 @@
 use rskafka::client::{partition::PartitionClient, partition::UnknownTopicHandling, ClientBuilder};
 use std::sync::Arc;
 
-/// Manages the continuous extraction of events from the Kafka broker
 pub struct EventConsumer {
     partition_client: Arc<PartitionClient>,
     pub current_offset: i64,
 }
 
 impl EventConsumer {
-    pub async fn new(brokers: Vec<String>, topic: String, initial_offset: i64) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        brokers: Vec<String>,
+        topic: String,
+        partition: i32,
+        initial_offset: i64,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let client = ClientBuilder::new(brokers).build().await?;
         let partition_client = Arc::new(
             client
-                .partition_client(topic, 0, UnknownTopicHandling::Retry)
+                .partition_client(topic, partition, UnknownTopicHandling::Retry)
                 .await?,
         );
 
@@ -22,8 +26,6 @@ impl EventConsumer {
         })
     }
 
-    /// Fetches a chunk of records and returns the raw byte payloads along with a boolean
-    /// indicating if the consumer has fully caught up to the head of the topic.
     pub async fn fetch_events(&mut self) -> Result<(Vec<Vec<u8>>, bool), rskafka::client::error::Error> {
         let (records, high_watermark) = self
             .partition_client
@@ -40,7 +42,6 @@ impl EventConsumer {
         }
 
         let is_caught_up = self.current_offset == high_watermark;
-
         Ok((payloads, is_caught_up))
     }
 }

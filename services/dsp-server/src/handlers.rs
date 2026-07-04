@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse},
+    Json,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -21,6 +22,26 @@ pub struct RenderParams {
     pub auction_id: String,
     pub price: Option<Decimal>,
     pub r: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpsertCreativeRequest {
+    pub html: String,
+}
+
+#[instrument(skip(state), fields(creative = %creative_id))]
+pub async fn upsert_creative(
+    State(state): State<AppState>,
+    Path(creative_id): Path<String>,
+    Json(payload): Json<UpsertCreativeRequest>,
+) -> impl IntoResponse {
+    match state.store.set_creative(&creative_id, &payload.html).await {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to store creative {}: {}", creative_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 #[instrument(skip(state), fields(creative = %creative_id))]

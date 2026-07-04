@@ -23,6 +23,8 @@ spec:
               value: "redpanda:9092"
             - name: KAFKA_EVENTS_TOPIC
               value: "ad_events"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
             - name: RUST_LOG
               value: "info"
 

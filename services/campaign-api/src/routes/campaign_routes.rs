@@ -8,7 +8,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize};
+use serde::Deserialize;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -18,7 +18,6 @@ pub struct CreateCampaignRequest {
     pub name: String,
     pub budget: rust_decimal::Decimal,
     pub max_cpm: rust_decimal::Decimal,
-    /// Audience segment IDs to target. Omit or send [] for run-of-network.
     pub target_segments: Option<Vec<String>>,
     pub start_date: chrono::DateTime<chrono::Utc>,
     pub end_date: chrono::DateTime<chrono::Utc>,
@@ -29,14 +28,12 @@ pub struct UpdateStatusRequest {
     pub status: crate::domain::campaign::CampaignStatus,
 }
 
-/// Pagination parameters for listing campaigns
 #[derive(Debug, Deserialize)]
 pub struct PaginationParams {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
 
-/// Upgraded Production Error Enum
 pub enum AppError {
     ValidationError(String),
     DatabaseError(sqlx::Error),
@@ -46,28 +43,22 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         let (status, error_message) = match self {
-            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::DatabaseError(err) => {
-                // We use structured tracing here to log the real error for developers,
-                // but we hide the SQL error from the client to prevent data leaks.
                 tracing::error!("Database error occurred: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             }
         };
-
         (status, Json(serde_json::json!({ "error": error_message }))).into_response()
     }
 }
 
-/// POST /campaigns
-// We can use the tracing macro to automatically log the inputs of this function
 #[tracing::instrument(skip(state))]
 async fn create_campaign(
     State(state): State<AppState>,
     Json(payload): Json<CreateCampaignRequest>,
 ) -> Result<(StatusCode, Json<Campaign>), AppError> {
-
     if let Err(e) = payload.validate() {
         return Err(AppError::ValidationError(e.to_string()));
     }
@@ -87,84 +78,53 @@ async fn create_campaign(
     };
 
     let repo = CampaignRepository::new(state.db_pool);
-    let created = repo
-        .create_campaign(&new_campaign)
-        .await
-        .map_err(AppError::DatabaseError)?;
+    // Writes campaign + outbox row atomically; the outbox poller publishes to Kafka.
+    let created = repo.create_campaign(&new_campaign).await.map_err(AppError::DatabaseError)?;
 
-    // 2. Real-time Kafka Sync
-    // We pass the fully hydrated 'created' object (with real DB timestamps) to Kafka
-    if let Err(err) = state.kafka_publisher.publish_campaign_event(&created).await {
-        // We do not fail the HTTP request if Kafka fails, because the DB commit succeeded.
-        // In a true Outbox pattern, this mismatch wouldn't happen. For now, we aggressively log it.
-        tracing::error!("CRITICAL: Failed to publish campaign {} to Kafka: {:?}", created.id, err);
-    } else {
-        tracing::info!("Successfully created and published campaign: {}", created.id);
-    }
+    tracing::info!("Created campaign {} (outbox row queued for Kafka)", created.id);
     Ok((StatusCode::CREATED, Json(created)))
 }
 
-/// PATCH /campaigns/{id}/status
 #[tracing::instrument(skip(state))]
 async fn update_status(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateStatusRequest>,
 ) -> Result<Json<Campaign>, AppError> {
-
-    let repo = CampaignRepository::new(state.db_pool.clone());
-
-    // 1. Update the DB
+    let repo = CampaignRepository::new(state.db_pool);
+    // Writes status + outbox row atomically.
     let updated = repo
         .update_campaign_status(id, payload.status.clone())
         .await
         .map_err(AppError::DatabaseError)?;
 
-    // 2. Real-time Kafka Sync (Only when status changes!)
-    // If it turns Active, the RTB engine caches it and starts bidding.
-    // If it turns Paused, the RTB engine evicts it from cache and stops bidding.
-    if let Err(err) = state.kafka_publisher.publish_campaign_event(&updated).await {
-        tracing::error!("CRITICAL: Failed to publish status update for {} to Kafka: {:?}", updated.id, err);
-    } else {
-        // As discussed, we let the route handler do the logging!
-        tracing::info!("Campaign {} status changed to {:?} and broadcasted", updated.id, updated.status);
-    }
-
+    tracing::info!("Campaign {} status → {:?} (outbox row queued)", updated.id, updated.status);
     Ok(Json(updated))
 }
 
-/// GET /campaigns/{id}
 #[tracing::instrument(skip(state))]
 async fn get_campaign(
     State(state): State<AppState>,
-    Path(id): Path<Uuid>, // Extracts the UUID directly from the URL path
+    Path(id): Path<Uuid>,
 ) -> Result<Json<Campaign>, AppError> {
-
     let repo = CampaignRepository::new(state.db_pool);
     let campaign = repo
         .get_campaign(id)
         .await
         .map_err(AppError::DatabaseError)?
         .ok_or_else(|| AppError::NotFound(format!("Campaign with ID {} not found", id)))?;
-
     Ok(Json(campaign))
 }
 
-/// Get All campaigns
 #[tracing::instrument(skip(state))]
 async fn list_campaigns(
     State(state): State<AppState>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<Campaign>>, AppError> {
-    let limit = params.limit.unwrap_or(50); // Default AdTech limit
+    let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
-
     let repo = CampaignRepository::new(state.db_pool);
-    let campaigns = repo
-        .list_campaigns(limit, offset)
-        .await
-        .map_err(AppError::DatabaseError)?;
-
+    let campaigns = repo.list_campaigns(limit, offset).await.map_err(AppError::DatabaseError)?;
     Ok(Json(campaigns))
 }
 
